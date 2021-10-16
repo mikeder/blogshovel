@@ -28,6 +28,7 @@ type Post struct {
 	HTML      string `json:"html"`
 	Published string `json:"published"`
 	Updated   string `json:"updated"`
+    Highlight *int    `json:"highlight"`
 }
 
 type Database struct {
@@ -58,6 +59,7 @@ func (d *Database) getPosts() ([]Post, error) {
 			&post.HTML,
 			&post.Published,
 			&post.Updated,
+            &post.Highlight,
 		)
 		if err != nil {
 			return posts, err
