@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
 	"io/ioutil"
 	"os"
 	"os/user"
+	"time"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type Archive struct {
@@ -28,7 +30,7 @@ type Post struct {
 	HTML      string `json:"html"`
 	Published string `json:"published"`
 	Updated   string `json:"updated"`
-    Highlight *int    `json:"highlight"`
+	Highlight *int   `json:"highlight"`
 }
 
 type Database struct {
@@ -59,7 +61,7 @@ func (d *Database) getPosts() ([]Post, error) {
 			&post.HTML,
 			&post.Published,
 			&post.Updated,
-            &post.Highlight,
+			&post.Highlight,
 		)
 		if err != nil {
 			return posts, err
@@ -76,9 +78,11 @@ func (a *Archive) write() error {
 			a.Date + "\n" +
 			a.Updated + "\n" +
 			"categories: [\"Archive\"]\n" +
+			"draft: true\n" +
 			"---\n" +
 			"\n" +
-			a.Body)
+			a.Body,
+	)
 	fmt.Printf("Writing %v\n", a.Filename)
 	err := ioutil.WriteFile(a.Filename, data, 0644)
 	if err != nil {
@@ -88,7 +92,7 @@ func (a *Archive) write() error {
 }
 
 func main() {
-	fmt.Println("blogshovel: mysql -> archive(markdown)\n")
+	fmt.Println("blogshovel: mysql -> archive(markdown)")
 
 	// Setup default output path
 	usr, err := user.Current()
@@ -98,7 +102,9 @@ func main() {
 	outPath := usr.HomeDir + "/archive/"
 
 	dryrun := flag.Bool("dryrun", false, "skip writing to file")
+
 	outdir := flag.String("outdir", outPath, "output files to this directory")
+
 	// Set a database connection string, this needs improvement.
 	defaultDbString := "user:password@tcp(host.domain:3306)/database"
 	dbstring := flag.String("dbconnstring", defaultDbString, "database connection string")
@@ -115,19 +121,36 @@ func main() {
 	posts, err := db.getPosts()
 	if err != nil {
 		fmt.Println(err)
+		os.Exit(1)
 	}
 	fmt.Printf("Found %d posts to export\n", len(posts))
 	for _, p := range posts {
 		fmt.Printf("Archiving: %v\n", p.Slug)
+
+		var body string
+		if p.Markdown != "" {
+			body = p.Markdown
+		} else {
+			body = p.HTML
+		}
+
+		playout := "2006-01-02 15:04:05"
+		ptime, err := time.Parse(playout, p.Published)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		fname := fmt.Sprintf("%s%d-%s.md", *outdir, ptime.Unix(), p.Slug)
 		out := Archive{
-			Filename:   *outdir + p.Slug + ".md",
+			Filename:   fname,
 			Title:      "title: " + p.Title,
 			Date:       "date: " + p.Published,
 			Categories: "[\"Archive\"]",
-			Body:       p.Markdown,
+			Body:       body,
 			Updated:    "updated: " + p.Updated,
 		}
-		if *dryrun != true {
+		if !*dryrun {
 			out.write()
 		}
 	}
